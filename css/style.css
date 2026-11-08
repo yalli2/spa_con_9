@@ -380,3 +380,20 @@ table.rub{width:100%;border-collapse:collapse;font-size:14px}
   #sec-examen>*:not(#report){display:none!important}
   body{background:#fff}.card{box-shadow:none}
 }
+
+/* 특수문자 입력 버튼 */
+.keys{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:rgba(91,42,28,.96);box-shadow:0 -4px 18px rgba(0,0,0,.18);animation:keysUp .18s ease-out}
+.keys[hidden]{display:none}
+@keyframes keysUp{from{transform:translateY(100%)}to{transform:none}}
+.keys-l{color:var(--yellow);font-size:12px;font-weight:700;white-space:nowrap}
+.keys-h{color:rgba(255,255,255,.6);font-size:12px;white-space:nowrap}
+.keys-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.key{min-width:44px;height:44px;border:0;border-radius:10px;background:#fff;color:var(--ink);font-family:var(--serif);font-size:24px;font-weight:700;line-height:1;box-shadow:0 3px 0 #d9c7a5;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.key:hover{background:var(--yellow)}
+.key:active{transform:translateY(2px);box-shadow:0 1px 0 #d9c7a5}
+.key.shift{background:#f3e7cf;font-family:var(--sans);font-size:18px}
+.key.shift.on{background:var(--orange);color:#fff;box-shadow:0 3px 0 #b84b10}
+body.keys-on{padding-bottom:76px}
+body.keys-on .foot{margin-bottom:0}
+@media (max-width:900px){.keys{gap:6px;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}.keys-l,.keys-h{display:none}.key{min-width:34px;height:40px;font-size:21px;padding:0 4px}.keys-row{gap:4px;flex-wrap:nowrap}body.keys-on{padding-bottom:58px}}
+@media print{.keys{display:none!important}}

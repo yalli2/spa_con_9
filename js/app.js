@@ -911,8 +911,45 @@
     updateProgress();
   }
 
+  /* ---------- 특수문자 입력 버튼 ---------- */
+  function buildKeys() {
+    const LOW = ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü', '¿', '¡'];
+    const bar = el(`<div id="keys" class="keys" aria-label="특수문자 입력" hidden>
+      <span class="keys-l">특수문자</span>
+      <div class="keys-row">${LOW.map(c => `<button type="button" class="key" data-c="${c}">${c}</button>`).join('')}
+      <button type="button" class="key shift" title="대문자 전환 (Á É Í Ó Ú Ñ)">⇧</button></div>
+      <span class="keys-h">악센트 문자를 눌러 넣으세요</span></div>`);
+    document.body.appendChild(bar);
+    let target = null, upper = false, hideT = null;
+    const isField = n => n && n.matches && n.matches('main input[type="text"], main input:not([type]), main textarea');
+    const paintKeys = () => { $$('.key[data-c]', bar).forEach(b => { const c = b.dataset.c; b.textContent = upper ? c.toUpperCase() : c; }); $('.shift', bar).classList.toggle('on', upper); };
+    const place = () => {
+      const vv = window.visualViewport;
+      bar.style.bottom = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + 'px' : '0px';
+    };
+    const show = f => {
+      clearTimeout(hideT); target = f; bar.hidden = false; document.body.classList.add('keys-on'); place();
+      requestAnimationFrame(() => { const r = f.getBoundingClientRect(), top = bar.getBoundingClientRect().top; if (r.bottom > top - 8) window.scrollBy({ top: r.bottom - top + 24, behavior: 'smooth' }); });
+    };
+    document.addEventListener('focusin', e => { if (isField(e.target)) show(e.target); });
+    document.addEventListener('focusout', e => { if (isField(e.target)) hideT = setTimeout(() => { if (!isField(document.activeElement)) { bar.hidden = true; document.body.classList.remove('keys-on'); } }, 150); });
+    bar.addEventListener('mousedown', e => e.preventDefault());   // 입력칸 포커스 유지
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('.key'); if (!b || !target) return;
+      if (b.classList.contains('shift')) { upper = !upper; paintKeys(); return; }
+      const ch = (upper || e.shiftKey) ? b.dataset.c.toUpperCase() : b.dataset.c;
+      const s = target.selectionStart ?? target.value.length, en = target.selectionEnd ?? s;
+      target.setRangeText(ch, s, en, 'end');
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      target.focus();
+      if (upper) { upper = false; paintKeys(); }   // 대문자는 한 글자만
+    });
+    if (window.visualViewport) { visualViewport.addEventListener('resize', place); visualViewport.addEventListener('scroll', place); }
+  }
+
   function init() {
     buildNav();
+    buildKeys();
     const main = $('main');
     D.sections.forEach(x => { const s = document.createElement('section'); s.id = 'sec-' + x.id; s.hidden = true; main.insertBefore(s, $('#pager')); });
     D.sections.forEach(x => { if (B[x.id]) B[x.id](); });
