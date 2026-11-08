@@ -19,7 +19,7 @@ i{font-style:italic}
 .lb b{font-size:22px;font-family:var(--sans);font-weight:900}
 .bt{font-family:var(--serif);font-size:24px;font-weight:700;line-height:1.1}
 .bt small{display:block;font-family:var(--sans);font-size:12px;font-weight:400;opacity:.8}
-.prog{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;white-space:nowrap}
+.prog{margin-left:14px;display:flex;align-items:center;gap:10px;font-size:13px;white-space:nowrap}
 #topbar{width:160px;height:10px;border-radius:9px;background:rgba(255,255,255,.2);overflow:hidden}
 #topbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--yellow),var(--orange));transition:width .4s}
 
@@ -398,3 +398,32 @@ body.keys-on .foot{margin-bottom:0}
 @media (max-width:900px){.keys{gap:6px;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}.keys-l,.keys-h{display:none}.key{min-width:34px;height:40px;font-size:21px;padding:0 4px}.keys-row{gap:4px;flex-wrap:nowrap}body.keys-on{padding-bottom:58px}}
 @media print{.keys{display:none!important}}
 .key.hit{background:var(--yellow);transform:translateY(2px)}
+
+/* 소리 점검 */
+.sndbtn{margin-left:auto;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.1);color:#fff;border-radius:999px;padding:5px 14px;font-size:13px;font-weight:700;white-space:nowrap}
+.sndbtn:hover{background:rgba(255,255,255,.25)}
+.say.playing,.btn.playing{animation:pulse .8s infinite;background:var(--yellow)!important;color:var(--ink)!important}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(255,225,77,.45)}}
+.toast{position:fixed;left:50%;top:84px;z-index:70;transform:translate(-50%,-20px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:10px;max-width:min(560px,92vw);background:#2b2420;color:#fff;border-radius:12px;padding:10px 12px 10px 16px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px;transition:all .25s}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast .tchk{background:var(--yellow);color:var(--ink);white-space:nowrap}
+.toast .tx{background:none;border:0;color:#fff;font-size:16px}
+.modal{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(43,36,32,.45);padding:16px}
+.modal.on{display:flex}
+.mbox{position:relative;width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--paper);border-radius:18px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.mbox h2{margin:0 0 12px;font-size:22px}
+.mx{position:absolute;right:14px;top:12px;border:0;background:none;font-size:20px}
+.chk-status{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.chk-status div{padding:3px 12px;border-radius:999px;font-size:13.5px;font-weight:700}
+.chk-status .y{background:#dff4e6;color:#16743a}.chk-status .n{background:#fde2e4;color:#b4121f}
+.chk-row{display:flex;flex-direction:column;gap:4px;margin:10px 0}
+.chk-row label{font-size:13px;color:var(--mute)}
+.vsel{font:inherit;padding:8px;border-radius:8px;border:1.5px solid #d9ccb0;background:#fff}
+.rate{width:100%;accent-color:var(--orange)}
+.chk-res{border-radius:10px;padding:0;font-size:14px}
+.chk-res:not(:empty){padding:10px 14px}
+.chk-res.good{background:#dff4e6;color:#16743a}.chk-res.bad{background:#fde2e4;color:#b4121f}.chk-res.wait{background:#fff4c4}
+.chk-tips{padding-left:18px;font-size:13.5px;margin:8px 0 0}.chk-tips li{margin:5px 0}
+details summary{cursor:pointer;font-weight:700;margin-top:6px}
+@media (max-width:900px){.sndbtn span{display:none}.sndbtn{padding:5px 10px}}
+@media print{.sndbtn,.toast,.modal{display:none!important}}

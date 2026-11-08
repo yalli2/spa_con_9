@@ -23,19 +23,114 @@
     save();
   }
 
-  /* ---------- 발음 (Web Speech) ---------- */
-  let VOICE = null;
-  function pickVoice() { try { const vs = speechSynthesis.getVoices(); VOICE = vs.find(v => /^es[-_]ES/i.test(v.lang)) || vs.find(v => /^es/i.test(v.lang)) || null; } catch (e) { } }
-  if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-  function utter(t, pitch) { const u = new SpeechSynthesisUtterance(t.replace(/[\[\]]/g, '').replace(/\|[^\]]*/g, '')); u.lang = 'es-ES'; if (VOICE) u.voice = VOICE; u.rate = 0.9; u.pitch = pitch || 1; return u; }
-  function speak(t) { if (!('speechSynthesis' in window)) return; speechSynthesis.cancel(); speechSynthesis.speak(utter(t)); }
-  function playLines(lines) {
-    if (!('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
-    const who = [...new Set(lines.map(l => l.who))];
-    lines.forEach(l => speechSynthesis.speak(utter(l.es, who.indexOf(l.who) % 2 ? 1.25 : 0.85)));
+  /* ---------- 발음 (Web Speech) + 소리 점검 ---------- */
+  const TTS_OK = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  let VOICES = [], VOICE = null, KEEP = [], watchdog = null;
+  const ttsSet = () => (S.tts = S.tts || { voice: '', rate: 0.9 });
+  function pickVoice() {
+    if (!TTS_OK) return;
+    try {
+      VOICES = speechSynthesis.getVoices().filter(v => /^es/i.test(v.lang));
+      const want = ttsSet().voice;
+      VOICE = VOICES.find(v => v.name === want) || VOICES.find(v => /^es[-_]ES/i.test(v.lang) && v.localService) || VOICES.find(v => /^es[-_]ES/i.test(v.lang)) || VOICES[0] || null;
+      if (typeof drawCheck === 'function') drawCheck();
+    } catch (e) { }
   }
-  document.addEventListener('click', e => { const b = e.target.closest('[data-say]'); if (b) speak(b.dataset.say); });
+  if (TTS_OK) { pickVoice(); speechSynthesis.addEventListener ? speechSynthesis.addEventListener('voiceschanged', pickVoice) : (speechSynthesis.onvoiceschanged = pickVoice); setTimeout(pickVoice, 500); setTimeout(pickVoice, 2000); }
+  function utter(t, pitch) {
+    const u = new SpeechSynthesisUtterance(t.replace(/[\[\]]/g, ''));
+    u.lang = VOICE ? VOICE.lang : 'es-ES'; if (VOICE) u.voice = VOICE;
+    u.rate = ttsSet().rate || 0.9; u.pitch = pitch || 1; u.volume = 1;
+    KEEP.push(u); if (KEEP.length > 40) KEEP.shift();   // 크롬 GC로 재생이 끊기는 문제 방지
+    return u;
+  }
+  let playingBtn = null;
+  const mark = (btn, on) => { if (playingBtn && playingBtn !== btn) playingBtn.classList.remove('playing'); playingBtn = on ? btn : null; if (btn) btn.classList.toggle('playing', on); };
+  function run(list, btn) {
+    if (!TTS_OK) { toast('이 브라우저는 음성 읽기 기능을 지원하지 않아요. 크롬·엣지·사파리 최신 버전에서 열어 주세요.'); return; }
+    if (!VOICES.length) pickVoice();
+    try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch (e) { }
+    clearTimeout(watchdog);
+    let started = false;
+    list[0].addEventListener('start', () => { started = true; clearTimeout(watchdog); hideToast(); });
+    list[list.length - 1].addEventListener('end', () => mark(btn, false));
+    list.forEach(u => u.addEventListener('error', e => { if (e.error !== 'interrupted' && e.error !== 'canceled') { mark(btn, false); toast(`재생 오류(${e.error}). 🔊 소리 점검을 열어 확인해 보세요.`, true); } }));
+    mark(btn, true);
+    setTimeout(() => { list.forEach(u => speechSynthesis.speak(u)); }, 60);   // cancel 직후 바로 speak 하면 무시되는 크롬 버그 회피
+    watchdog = setTimeout(() => {
+      if (started) return;
+      mark(btn, false);
+      try { speechSynthesis.cancel(); } catch (e) { }
+      toast(VOICES.length ? '음성이 시작되지 않았어요. 한 번 더 눌러 보고, 계속 안 되면 소리 점검을 열어 주세요.' : '이 기기에 스페인어 음성이 없어 재생되지 않아요. 소리 점검에서 설치 방법을 확인하세요.', true);
+    }, 3000);
+  }
+  function speak(t, btn) { run([utter(t)], btn); }
+  function playLines(lines, btn) {
+    const who = [...new Set(lines.map(l => l.who))];
+    run(lines.map(l => utter(l.es, who.indexOf(l.who) % 2 ? 1.2 : 0.9)), btn);
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-say]'); if (b) speak(b.dataset.say, b); });
+
+  /* 알림 토스트 */
+  function toast(msg, withCheck) {
+    let t = $('#toast');
+    if (!t) { t = el('<div id="toast" class="toast" role="status"><span class="tm"></span><button class="btn sm tchk">🔊 소리 점검</button><button class="tx" aria-label="닫기">✕</button></div>'); document.body.appendChild(t); $('.tx', t).onclick = hideToast; $('.tchk', t).onclick = () => { hideToast(); openCheck(); }; }
+    $('.tm', t).textContent = msg; $('.tchk', t).hidden = !withCheck; t.classList.add('on');
+    clearTimeout(t._h); t._h = setTimeout(hideToast, 9000);
+  }
+  function hideToast() { const t = $('#toast'); if (t) t.classList.remove('on'); }
+
+  /* 소리 점검 창 */
+  let drawCheck = null;
+  function openCheck() {
+    let m = $('#sndchk');
+    if (!m) {
+      m = el(`<div id="sndchk" class="modal" role="dialog" aria-label="소리 점검"><div class="mbox">
+        <button class="mx" aria-label="닫기">✕</button>
+        <h2>🔊 소리 점검</h2>
+        <div class="chk-status"></div>
+        <div class="chk-row"><label>스페인어 음성</label><select class="vsel"></select></div>
+        <div class="chk-row"><label>말하기 속도 <b class="rv"></b></label><input class="rate" type="range" min="0.6" max="1.2" step="0.05"></div>
+        <div class="chk-row"><button class="btn big ttest">▶ 테스트 재생: “¡Hola! Me gusta mucho viajar.”</button></div>
+        <div class="chk-res"></div>
+        <details open><summary>그래도 안 들릴 때 확인할 것</summary><ul class="chk-tips">
+          <li>🔈 기기 <b>볼륨</b>과 음소거, <b>이어폰·블루투스</b> 연결(소리가 다른 기기로 나가는지) 확인</li>
+          <li>🧭 크롬·엣지: 탭을 마우스 오른쪽 클릭 → <b>사이트 음소거 해제</b> / 주소창 왼쪽 자물쇠 → 사이트 설정 → 소리 <b>허용</b></li>
+          <li>📱 아이폰·아이패드: 옆면 <b>무음 스위치</b>를 끄고(주황색이 안 보이게) 볼륨 올리기</li>
+          <li>🪟 Windows에 스페인어 음성이 없으면: 설정 → 시간 및 언어 → 음성 → <b>음성 추가</b> → Español(España) 설치 후 브라우저 다시 열기</li>
+          <li>🤖 안드로이드: 설정 → 접근성(또는 일반) → <b>텍스트 음성 변환</b> → Google 음성 엔진 → 스페인어 음성 데이터 설치</li>
+          <li>🏠 홈페이지(크리에이터링크) 안에서 열었다면 <a href="https://yalli2.github.io/spa_con_9/" target="_blank" rel="noopener">사이트를 새 창으로 열기</a></li>
+        </ul></details></div></div>`);
+      document.body.appendChild(m);
+      $('.mx', m).onclick = () => m.classList.remove('on');
+      m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); });
+      $('.vsel', m).onchange = e => { ttsSet().voice = e.target.value; save(); pickVoice(); };
+      $('.rate', m).oninput = e => { ttsSet().rate = +e.target.value; $('.rv', m).textContent = '×' + (+e.target.value).toFixed(2); save(); };
+      $('.ttest', m).onclick = () => {
+        const res = $('.chk-res', m); res.className = 'chk-res wait'; res.textContent = '재생 요청 중…';
+        if (!TTS_OK) { res.className = 'chk-res bad'; res.textContent = '✕ 이 브라우저는 음성 읽기를 지원하지 않습니다.'; return; }
+        const u = utter('¡Hola! Me gusta mucho viajar.');
+        let ok = false;
+        u.addEventListener('start', () => { ok = true; res.className = 'chk-res good'; res.innerHTML = `✔ 재생이 시작됐어요 (${esc(VOICE ? VOICE.name : '기본 음성')}).<br>소리가 들리면 정상입니다. <b>재생은 됐는데 안 들리면</b> 아래 볼륨·음소거·출력 기기를 확인하세요.`; });
+        u.addEventListener('error', e => { if (e.error === 'interrupted') return; ok = true; res.className = 'chk-res bad'; res.textContent = '✕ 재생 오류: ' + e.error; });
+        run([u], $('.ttest', m));
+        setTimeout(() => { if (!ok) { res.className = 'chk-res bad'; res.innerHTML = '✕ 재생이 시작되지 않았어요. ' + (VOICES.length ? '브라우저를 완전히 닫았다 다시 열어 보세요.' : '이 기기에 <b>스페인어 음성이 설치되어 있지 않아요</b>. 아래 설치 방법을 따라 주세요.'); } }, 3200);
+      };
+    }
+    drawCheck = () => {
+      const st = $('.chk-status', m);
+      const nAll = TTS_OK ? speechSynthesis.getVoices().length : 0;
+      st.innerHTML = `<div class="${TTS_OK ? 'y' : 'n'}">${TTS_OK ? '✔' : '✕'} 음성 읽기 기능 ${TTS_OK ? '지원' : '미지원'}</div>
+        <div class="${VOICES.length ? 'y' : 'n'}">${VOICES.length ? '✔' : '✕'} 스페인어 음성 ${VOICES.length}개 (전체 ${nAll}개)</div>`;
+      const sel = $('.vsel', m);
+      sel.innerHTML = VOICES.length ? VOICES.map(v => `<option value="${esc(v.name)}" ${VOICE && v.name === VOICE.name ? 'selected' : ''}>${esc(v.name)} (${v.lang})${v.localService ? '' : ' · 온라인'}</option>`).join('') : '<option>스페인어 음성 없음 — 기본 음성 사용</option>';
+      sel.disabled = !VOICES.length;
+      const r = ttsSet().rate || 0.9; $('.rate', m).value = r; $('.rv', m).textContent = '×' + r.toFixed(2);
+    };
+    pickVoice(); drawCheck();
+    $('.chk-res', m).className = 'chk-res'; $('.chk-res', m).textContent = '';
+    m.classList.add('on');
+  }
   const say = t => `<button class="say" data-say="${esc(t)}" title="듣기" aria-label="듣기">🔊</button>`;
 
   /* ---------- 채점 엔진 ---------- */
@@ -318,7 +413,7 @@
         <div class="legend">
           <div><span class="mk ok">○</span> 정답</div><div><span class="mk half">△</span> 부분 정답 (악센트 · ¿¡ 부호)</div><div><span class="mk no">✕</span> 오답 — 정답 예시가 나와요</div>
           <div><mark class="goodm">초록 형광펜</mark> 잘 쓴 핵심 구조</div><div><mark class="bad">빨간 펜<sup>1</sup></mark> 고칠 부분 (번호별 설명)</div>
-          <div><span class="tl-demo">t<b class="tl">é</b></span> 정답 속 악센트 · 부호 강조</div><div>${say('Me gusta mucho viajar')} 원어민 발음 듣기</div>
+          <div><span class="tl-demo">t<b class="tl">é</b></span> 정답 속 악센트 · 부호 강조</div><div>${say('Me gusta mucho viajar')} 원어민 발음 듣기 — 소리가 안 나면 상단 <b>🔊 소리 점검</b></div>
         </div>
         <p class="small">모든 문항은 <b>직접 써서</b> 답하는 쓰기시험 형식입니다. Enter 키로도 채점할 수 있어요.</p>
       </div>`);
@@ -421,7 +516,7 @@
       <div class="chips"><span class="hlc c0">me encanta</span><span class="hlc c1">especialmente</span><span class="hlc c2">hacer un viaje</span><span class="hlc c0">sobre todo</span></div>
       <div class="items d1b"></div>
       <h3 class="h3">c) 나만의 대화 쓰기</h3><div class="d1f"></div>`);
-    $('#play1', s).onclick = () => playLines(D.dialogo1);
+    $('#play1', s).onclick = e => playLines(D.dialogo1, e.currentTarget);
     $('#hide1', s).onclick = e => { const t = $('#d1txt', s); t.classList.toggle('blur'); e.target.textContent = t.classList.contains('blur') ? '본문 보기' : '본문 가리기'; };
     put(s, '.d1c', cloze({ id: 'd1c', sec: 'd1', skill: 'gus', cls: 'lines', text: clozeFromDialog(D.dialogo1) }));
     [['"Me gusta mucho leer." → <b>encantar</b>로 바꿔 쓰세요.', ['Me encanta leer.']],
@@ -543,7 +638,7 @@
         <tr><th>A Marcos</th><td data-c="M+"></td><td data-c="M-"></td></tr><tr><th>A Adriana</th><td data-c="A+"></td><td data-c="A-"></td></tr></table>
       <div class="item-row"><button class="btn chk t">표 채점</button><span class="tscore"></span></div>
       <h3 class="h3">② 3인칭으로 쓰기 — A Marcos le gusta …</h3><div class="items two w5"></div>`);
-    $('#play5', s).onclick = () => playLines(D.dialogo5);
+    $('#play5', s).onclick = e => playLines(D.dialogo5, e.currentTarget);
     $('#hide5', s).onclick = e => { const t = $('#d5txt', s); t.classList.toggle('blur'); e.target.textContent = t.classList.contains('blur') ? '대화 보기' : '대화 가리기'; };
     const st = S.sel.a5 || (S.sel.a5 = {});
     let picked = null;
@@ -583,7 +678,7 @@
         .map(([e, k, p]) => `<div class="fr"><span class="fl">${e} ${say(e.split(' / ')[0])}</span><span class="fbar"><i style="width:${p}%"></i></span><span class="fk">${k}</span></div>`).join('')}</div>
       ${tip('<b>nunca</b>가 동사 앞이면 no 없이: Nunca voy a la piscina. / 동사 뒤면 no와 함께: No voy nunca a la piscina.')}
       <div class="item sortq"><div class="item-p">자주 하는 순서대로 누르세요 (많이 → 적게)</div><div class="sort-line"></div><div class="sort-bank"></div><div class="item-row"><button class="btn ghost rst">다시</button><button class="btn chk">확인</button><span class="mkbox"></span></div></div>`);
-    $('#play2', s).onclick = () => playLines(D.dialogo2);
+    $('#play2', s).onclick = e => playLines(D.dialogo2, e.currentTarget);
     $('#hide2', s).onclick = e => { const t = $('#d2txt', s); t.classList.toggle('blur'); e.target.textContent = t.classList.contains('blur') ? '본문 보기' : '본문 가리기'; };
     [['El deporte favorito de Pedro es el baloncesto.', 'Verdadero'], ['Pedro va a la piscina dos veces a la semana.', 'Falso'], ['María va al parque a menudo con su mascota.', 'Verdadero'], ['Pedro va a Sierra Nevada en verano.', 'Falso']]
       .forEach(([p, a], i) => put(s, '.vf', choiceItem({ id: 'd2-vf' + i, sec: 'd2', skill: 'fre', prompt: p, options: ['Verdadero', 'Falso'], answer: a })));
@@ -972,6 +1067,7 @@
     D.sections.forEach(x => { if (B[x.id]) B[x.id](); });
     window.addEventListener('hashchange', route);
     $('#menu').onclick = () => document.body.classList.toggle('navopen');
+    $('#sndBtn').onclick = openCheck;
     route();
   }
   document.addEventListener('DOMContentLoaded', init);
