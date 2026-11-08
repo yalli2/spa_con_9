@@ -933,17 +933,34 @@
     };
     document.addEventListener('focusin', e => { if (isField(e.target)) show(e.target); });
     document.addEventListener('focusout', e => { if (isField(e.target)) hideT = setTimeout(() => { if (!isField(document.activeElement)) { bar.hidden = true; document.body.classList.remove('keys-on'); } }, 150); });
-    bar.addEventListener('mousedown', e => e.preventDefault());   // 입력칸 포커스 유지
-    bar.addEventListener('click', e => {
-      const b = e.target.closest('.key'); if (!b || !target) return;
+    /* 커서 위치 기억 (포커스가 잠깐 빠져도 같은 자리에 넣기 위해) */
+    let caret = { s: null, e: null };
+    const remember = ev => { const t = ev.target; if (isField(t) && t === target) { caret = { s: t.selectionStart, e: t.selectionEnd }; } };
+    ['keyup', 'mouseup', 'input', 'select', 'touchend'].forEach(k => document.addEventListener(k, remember, true));
+    document.addEventListener('focusin', e => { if (isField(e.target)) caret = { s: e.target.selectionStart, e: e.target.selectionEnd }; });
+    function insert(ch) {
+      const t = target; if (!t || !document.body.contains(t)) return;
+      const v = t.value;
+      let s = t.selectionStart, en = t.selectionEnd;
+      if (document.activeElement !== t || s == null) { s = caret.s ?? v.length; en = caret.e ?? s; }
+      t.value = v.slice(0, s) + ch + v.slice(en);
+      const p = s + ch.length;
+      try { t.focus({ preventScroll: true }); } catch (_) { t.focus(); }
+      try { t.setSelectionRange(p, p); } catch (_) { }
+      caret = { s: p, e: p };
+      t.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    function press(e, b) {
       if (b.classList.contains('shift')) { upper = !upper; paintKeys(); return; }
-      const ch = (upper || e.shiftKey) ? b.dataset.c.toUpperCase() : b.dataset.c;
-      const s = target.selectionStart ?? target.value.length, en = target.selectionEnd ?? s;
-      target.setRangeText(ch, s, en, 'end');
-      target.dispatchEvent(new Event('input', { bubbles: true }));
-      target.focus();
+      insert((upper || e.shiftKey) ? b.dataset.c.toUpperCase() : b.dataset.c);
       if (upper) { upper = false; paintKeys(); }   // 대문자는 한 글자만
-    });
+      b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 120);
+    }
+    /* 누르는 순간 바로 입력 + 기본동작 차단 → 입력칸 포커스·키보드가 유지됨 (iPad·휴대폰 포함) */
+    let lastTouch = 0;
+    bar.addEventListener('touchstart', e => { const b = e.target.closest('.key'); e.preventDefault(); lastTouch = Date.now(); if (b) press(e, b); }, { passive: false });
+    bar.addEventListener('mousedown', e => { e.preventDefault(); if (Date.now() - lastTouch < 800 || e.button !== 0) return; const b = e.target.closest('.key'); if (b) press(e, b); });
+    bar.addEventListener('click', e => { if (e.detail !== 0) return; const b = e.target.closest('.key'); if (b) press(e, b); });   // 키보드(Tab+Enter)로 누른 경우
     if (window.visualViewport) { visualViewport.addEventListener('resize', place); visualViewport.addEventListener('scroll', place); }
   }
 

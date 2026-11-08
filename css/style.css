@@ -397,3 +397,4 @@ body.keys-on{padding-bottom:76px}
 body.keys-on .foot{margin-bottom:0}
 @media (max-width:900px){.keys{gap:6px;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}.keys-l,.keys-h{display:none}.key{min-width:34px;height:40px;font-size:21px;padding:0 4px}.keys-row{gap:4px;flex-wrap:nowrap}body.keys-on{padding-bottom:58px}}
 @media print{.keys{display:none!important}}
+.key.hit{background:var(--yellow);transform:translateY(2px)}
